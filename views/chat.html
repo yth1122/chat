@@ -1,0 +1,211 @@
+{% extends 'index.html' %}
+
+{% block content %}
+  <h1>{{title}}</h1>
+  <div>{{profile}}</div>
+  <a href="/" id="exit-btn">방 나가기</a>
+  <fieldset>
+    <legend>채팅 내용</legend>
+    <div id="chat-list">
+      {% for chat in chats %}
+        {% if chat.user === user %}
+          <div class="mine" >
+            <div>{{chat.user}}</div>
+            {% if chat.gif %}
+              <img src="/gif/{{chat.gif}}" >
+            {% elif chat.emoticon %}
+              <img src="/emo{{chat.emoticon}}">
+            {% else %}
+              {% if chat.chat.indexOf('#')== -1  %}
+              <div class='normal'>{{chat.chat}}</div>
+              {% else %}            
+              <div class='tag'>{{chat.chat}}</div>
+              {% endif %}
+            
+            {% endif %}
+          </div>
+        {% elif chat.user === 'system' %}
+          <div class="system">
+            <div>{{chat.chat}}</div>
+          </div>
+        {% else %}
+          <div class="other" >
+            <!--profile 있을시-->
+            {% if chat.info.profile %}
+            <span><img class='img' style='width:20px; float:left; border:0px ;' src = '{{chat.info.profile}}'></span>
+            <!-- profile picture 없을시 기본 사진-->
+            {% else %}
+            <span><img class='img' style='width:20px; float:left; border:0px ;' src = '../images/default.png'></span>
+            {% endif %}
+            <div>{{chat.user}}</div>
+            {% if chat.gif %}
+              <img src="/gif/{{chat.gif}}">
+            {% elif chat.emoticon %}
+              <img src="/emo{{chat.emoticon}}">
+            {% else %}
+            <!--#이 들어갈 경우 click시 naver 키워드로 검색  -->
+              {% if chat.chat.indexOf('#')== -1  %}
+              <div class='normal'>{{chat.chat}}</div>
+              {% else %}            
+              <div class='tag'>{{chat.chat}}</div>
+              {% endif %}
+            {% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </fieldset>
+  <!--
+    이모티콘 리스트 나중에 db로 데이터 긁어서 사용
+  -->
+  <div id="popup">
+    <div id='emoti' >
+      {% for emo in emoti %}
+      <div class='emo_btn' role="button"><img class='emo_img' src="../emoticon/{{emo.path}}{{emo.info.name}}"></div>
+      {% endfor %}  
+    </div>
+  </div>
+  <form action="/chat" id="chat-form" method="post" enctype="multipart/form-data">
+    <input type='hidden' id='user' name='user' value="{{user}}">
+    <label for="gif"><img src= "../images/paperclip.png"></label>
+    <input type="file" id="gif" name="gif" accept=".jpg, .jpeg, .png , .gif">
+    <label for='emo' id="emo"><img src='../images/emoticon.png'></label>
+    <input type="text" id="chat" placeholder="메세지를 입력하세요.." style="border-radius:10px;width:200px" name="chat">
+    <button type="submit" style='display: none;'>전송</button>
+  </form>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    var gogogo='brrrr';
+     $('#popup').hide();
+     tag();
+    const last =  $('#chat-list div:last-child').length;
+    $('#chat-list div:last-child')[last-1].scrollIntoView();
+    const socket = io.connect('http://localhost:3000/chat', {
+      path: '/socket.io',
+    });
+    socket.on('join', function (data) {
+      const div = document.createElement('div');
+      div.classList.add('system');
+      const chat = document.createElement('div');
+      div.textContent = data.chat;
+      div.appendChild(chat);
+      document.querySelector('#chat-list').appendChild(div);
+    });
+    socket.on('exit', function (data) {
+      const div = document.createElement('div');
+      div.classList.add('system');
+      const chat = document.createElement('div');
+      div.textContent = data.chat;
+      div.appendChild(chat);
+      document.querySelector('#chat-list').appendChild(div);
+    });
+    socket.on('chat', async function (data,profile) {
+      const div = document.createElement('div');
+      const span = document.createElement('span');
+      const img = document.createElement('img');
+      if (data.user === '{{user}}') {
+        div.classList.add('mine');
+      } else {
+        div.classList.add('other');
+        if(profile){
+          img.src = profile;
+        }else{
+          img.src = '../images/default.png';
+        }
+        img.classList.add('img');
+        img.style.border = '0px';
+        span.appendChild(img);
+        div.appendChild(span);
+      }
+      const name = document.createElement('div');
+      name.textContent = data.user;
+      div.appendChild(name);
+      if (data.chat) {
+        const chat = document.createElement('div');
+        chat.textContent = data.chat;
+        if(data.chat.indexOf('#')==-1){
+          chat.classList.add('normal');
+        }else{
+          chat.classList.add('tag');
+        }
+        div.appendChild(chat);
+      } else if(data.emoticon) {
+        const emoticon = document.createElement('img');
+        emoticon.src = '/emo'+data.emoticon ; 
+        div.appendChild(emoticon);
+      } else {
+        const gif = document.createElement('img');
+        gif.src = '/gif/' + data.gif;
+        div.appendChild(gif);
+      }
+      document.querySelector('#chat-list').appendChild(div);
+      const last =  $('#chat-list div:last-child').length;
+      $('#chat-list div:last-child')[last-1].scrollIntoView();
+      tag();
+    });
+    function tag(){
+      $('.tag').on('click',function(e){
+      const keyword = e.target.textContent.replace('#','');
+      const search_url = 'https://search.naver.com/search.naver?where=nexearch&sm=top_hty&fbm=0&ie=utf8&query=';
+      window.open(search_url+keyword,'search',"width=1000,height:1000");
+    });
+    } 
+    document.querySelector('#chat-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (e.target.chat.value) {
+        axios.post('/room/{{room._id}}/chat', {
+          chat: this.chat.value,
+          user : this.user.value,
+        })
+        .then(() => {
+          e.target.chat.value = '';
+        })
+        .catch((err) => {
+          console.error(err);
+        });
+      }
+    });
+
+    document.querySelector('#emo').addEventListener('click',function(e){
+      $('#popup').show();
+
+      $('#popup').dialog({
+        modal:true,
+        dialogClass: 'content',
+        width:600,
+        height:350,
+      });
+    });
+    $('.emo_list').on('click',function(e){
+      console.log(e.target.dataset.id);
+      axios.get('/test/'+e.target.dataset.id).then(r=>{
+        console.log(r.data);
+      })
+    
+    })
+    $('.emo_btn').on('click',function(e){
+      // console.log(e.target.src);
+      axios.post('/room/{{room._id}}/emoticon',{
+        src : e.target.src
+      }).then(() => {
+          $('#popup').dialog('close');
+        })
+        .catch((err) => {
+          console.error(err);
+        });
+    });
+
+    document.querySelector('#gif').addEventListener('change', function (e) {
+      const formData = new FormData();
+      formData.append('gif', e.target.files[0]);
+      axios.post('/room/{{room._id}}/gif', formData)
+        .then(() => {
+          e.target.file = null;
+        })
+        .catch((err) => {
+          console.error(err);
+        });
+    });
+  </script>
+{% endblock %}
